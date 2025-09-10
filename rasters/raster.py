@@ -1068,11 +1068,22 @@ class Raster:
         if nodata is np.nan and "int" in str(self.dtype):
             raise ValueError("cannot use NaN as nodata value for integer layer")
 
+
+        # Always map resampling string to rasterio.enums.Resampling
         if resampling is None:
             resampling = "nearest"
 
-        if isinstance(resampling, str) and resampling in RASTERIO_RESAMPLING_METHODS:
-            resampling = RASTERIO_RESAMPLING_METHODS[resampling]
+        # Defensive: handle both string and enum
+        import rasterio.enums
+        if isinstance(resampling, str):
+            if resampling in RASTERIO_RESAMPLING_METHODS:
+                resampling = RASTERIO_RESAMPLING_METHODS[resampling]
+            elif hasattr(rasterio.enums.Resampling, resampling):
+                resampling = getattr(rasterio.enums.Resampling, resampling)
+            else:
+                raise ValueError(f"Unsupported resampling method: {resampling}. Supported: {list(RASTERIO_RESAMPLING_METHODS.keys())}")
+        elif not isinstance(resampling, rasterio.enums.Resampling):
+            raise ValueError(f"Resampling must be a string or rasterio.enums.Resampling, got {type(resampling)}")
 
         if isinstance(self.geometry, RasterGeolocation):
             if resampling == "nearest":
@@ -1125,6 +1136,11 @@ class Raster:
 
         if str(self.dtype) == "bool":
             source = source.astype(np.uint16)
+
+
+        # Debug: print nodata values before reprojection
+        print(f"[DEBUG] src_nodata: {src_nodata} (type: {type(src_nodata)})")
+        print(f"[DEBUG] dst_nodata: {dst_nodata} (type: {type(dst_nodata)})")
 
         # resample to destination array
         with rasterio.Env():
